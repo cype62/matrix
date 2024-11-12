@@ -79,23 +79,24 @@ def xhs_setup(account_file_path, handle=False ,account_id="",queue_id=""):
                         border=1)
         qr.add_data(qr_res["url"])
         qr.make()
-        img = qr.make_image(fill_color="black", back_color="white")
-        qrcode_path = pathlib.Path(
-                        BASE_DIR) / "xhs_uploader" / "qrcode"/f"qrcode_{queue_id}.png"
-        img.save(qrcode_path)
-        # 获取二维码图像的字节流
-        # 打开图片文件 
-        image = Image.open(qrcode_path)  
-        # 将图片转换为字节对象  
-        img_bytes = io.BytesIO()  
-        image.save(img_bytes, format='PNG')
-        img_bytes.seek(0)   
-        base64_data = "data:image/png;base64,"+base64.b64encode(img_bytes.read()).decode()
-        # 将id和登录url的关系存到redis
-        cache_data(f"xhs_login_ewm_{queue_id}",base64_data)
-        # 记录二维码完成后删除二维码文件
-        if os.path.exists(qrcode_path):
-            os.remove(qrcode_path)
+        qr.print_ascii(tty='#fff')
+        
+        # qrcode_path = pathlib.Path(
+        #                 BASE_DIR) / "xhs_uploader" / "qrcode"/f"qrcode_{queue_id}.png"
+        # img.save(qrcode_path)
+        # # 获取二维码图像的字节流
+        # # 打开图片文件 
+        # image = Image.open(qrcode_path)  
+        # # 将图片转换为字节对象  
+        # img_bytes = io.BytesIO()  
+        # image.save(img_bytes, format='PNG')
+        # img_bytes.seek(0)   
+        # base64_data = "data:image/png;base64,"+base64.b64encode(img_bytes.read()).decode()
+        # # 将id和登录url的关系存到redis
+        # cache_data(f"xhs_login_ewm_{queue_id}",base64_data)
+        # # 记录二维码完成后删除二维码文件
+        # if os.path.exists(qrcode_path):
+        #     os.remove(qrcode_path)
         user_info = False
         num=1
         while True:
