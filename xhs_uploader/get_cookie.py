@@ -3,15 +3,13 @@ import asyncio
 import base64
 import io
 import pathlib
-import time
 import traceback
 from PIL import Image
 from playwright.async_api import Playwright, async_playwright, Page
-from conf import BASE_DIR
+import redis
+from conf import BASE_DIR, REDIS_CONF
 
-account_file = "/Users/benny/Documents/github/matrix/xhs_uploader/account/account.json"
-
-async def cookie_auth(account_file):
+async def cookie_auth(account_file_path):
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         context = await browser.new_context(storage_state=account_file)
@@ -32,6 +30,33 @@ async def xhs_setup(account_file_path, handle=False,account_id="",queue_id=""):
     print("23423423:",user_info)
     return user_info
 
+def cache_data(key:str,value:str,timeout=60)->None:
+    if REDIS_CONF["password"]:
+        redis_client = redis.Redis(host=REDIS_CONF["host"], port=REDIS_CONF["port"], db=REDIS_CONF["select_db"],password=REDIS_CONF["password"])
+    else:
+        redis_client = redis.Redis(host=REDIS_CONF["host"], port=REDIS_CONF["port"], db=REDIS_CONF["select_db"])
+    redis_client.set(key, value)
+    redis_client.expire(key, timeout)
+
+def cache_get_data(key:str)->None:
+    if REDIS_CONF["password"]:
+        redis_client = redis.Redis(host=REDIS_CONF["host"], port=REDIS_CONF["port"], db=REDIS_CONF["select_db"],password=REDIS_CONF["password"])
+    else:
+        redis_client = redis.Redis(host=REDIS_CONF["host"], port=REDIS_CONF["port"], db=REDIS_CONF["select_db"])
+    data = redis_client.get(key)
+    if data is not None:  
+        # 解码bytes为字符串，这里假设数据是utf-8编码的  
+        data_str = data.decode('utf-8')  
+        return data_str
+    else:  
+        return ""
+def cache_delete(key:str)->None:
+    if REDIS_CONF["password"]:
+        redis_client = redis.Redis(host=REDIS_CONF["host"], port=REDIS_CONF["port"], db=REDIS_CONF["select_db"],password=REDIS_CONF["password"])
+    else:
+        redis_client = redis.Redis(host=REDIS_CONF["host"], port=REDIS_CONF["port"], db=REDIS_CONF["select_db"])
+    redis_client.delete(key)
+
 async def xhs_cookie_gen(account_file_path,account_id="",queue_id=""):
     try:
         async with async_playwright() as playwright:
@@ -51,6 +76,8 @@ async def xhs_cookie_gen(account_file_path,account_id="",queue_id=""):
             await page.locator("img").click()
             # 获取二维码base64值
             qrcode_base64 = await page.get_by_role("img").nth(2).get_attribute(name="src")
+            cache_data(f"xhs_login_ewm_{queue_id}",qrcode_base64)
+
             # 显示二维码图片
             await show_qr_code(qrcode_base64)
 
@@ -79,9 +106,17 @@ async def xhs_cookie_gen(account_file_path,account_id="",queue_id=""):
                         'username':await page.locator("div[class^=account-name]").inner_text(),#用户名
                         'avatar':await page.locator("div[class^=avatar] img").nth(0).get_attribute("src")#头像
                     }
+                    account_file = f"{account_file_path}/{account_id}_{third_id}_account.json"
                     # 保存cookie
                     await context.storage_state(path=account_file)
-           
+                    # 保存当前用户的登录状态，临时用来检测登陆状态用，只保存60s的状态检测
+                    cache_data(f"xhs_login_status_{account_id}",1,60)
+                    # 保存小红书号的登录状态，时间一个周
+                    cache_data(f"xhs_login_status_third_{account_id}_{third_id}",1,604800)
+            # 关闭浏览器
+            await context.close()
+            await browser.close()
+            await playwright.stop()
             return user_info
     except:
         traceback.print_exc()
@@ -145,11 +180,11 @@ async def check_qr_code_status(page, qr_code_id):
         else:
             print(f"HTTP 错误: {response.status}")
 
-        await asyncio.sleep(2)  # 使用 asyncio.sleep
+        await asyncio.sleep(1)  # 使用 asyncio.sleep
 
 async def main():
     # await xhs_cookie_gen(None, None, None)
-    await cookie_auth(account_file)
+    await cookie_auth(account_file_path)
 
 if __name__ == '__main__':
     try:
