@@ -31,6 +31,7 @@ async def playwright_main(uri, data, a1, web_session):
             await asyncio.sleep(1)
             cookies = await browser_context.cookies()
             for cookie in cookies:
+                print(f"cookie:{cookie}")
                 if cookie["name"] == "a1":
                     global_a1 = cookie["value"]
             if a1 != global_a1:

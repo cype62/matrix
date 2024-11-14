@@ -67,7 +67,7 @@ async def ks_cookie_gen(account_file_path, account_id="", queue_id=""):
     try:
         async with async_playwright() as playwright:
             options = {
-                'headless': False
+                'headless': True
             }
             # Make sure to run headed.
             browser = await playwright.chromium.launch(**options)
@@ -133,8 +133,8 @@ async def ks_cookie_gen(account_file_path, account_id="", queue_id=""):
                 third_id = third_id_cont.split("：")[1]
                 user_info = {
                     'account_id': third_id,  # 抖音号
-                    'username': await page.locator(".personal-info__detail div.detail__name").inner_text(),  # 用户名
-                    'avatar': await page.locator(".personal-info__detail div.detail__row img").nth(0).get_attribute("src")  # 头像
+                    'username': await page.locator("div.info-top-name").inner_text(),  # 用户名
+                    'avatar': await page.locator("div.user-info-avatar img").nth(0).get_attribute("src")  # 头像
                 }
                 account_file = f"{account_file_path}/{account_id}_{third_id}_account.json"
                 # 保存cookie
@@ -186,9 +186,9 @@ class KuaiShouVideo(object):
     async def upload(self, playwright: Playwright) -> None:
         # 使用 Chromium 浏览器启动一个浏览器实例
         if self.local_executable_path:
-            browser = await playwright.chromium.launch(headless=False, executable_path=self.local_executable_path)
+            browser = await playwright.chromium.launch(headless=True, executable_path=self.local_executable_path)
         else:
-            browser = await playwright.chromium.launch(headless=False)
+            browser = await playwright.chromium.launch(headless=True)
         # 创建一个浏览器上下文，使用指定的 cookie 文件
         context = await browser.new_context(storage_state=f"{self.account_file}")
 
@@ -209,16 +209,34 @@ class KuaiShouVideo(object):
         await file_chooser.set_files(self.file_path)
         # 等待页面跳转到指定的 URL
         await asyncio.sleep(1)
-        known_button = page.get_by_role("button", name="我知道了")
-        if await known_button.count():
-           await known_button.click()
+
+        # 等待按钮可交互
+        skip_button = page.locator('div[data-action="skip"]')
+        if await skip_button.count() > 0:
+               # 如果跳过按钮存在，点击它
+               await skip_button.click()
+               print('已成功点击跳过按钮')
+        else:
+               print('跳过按钮不存在')
+            
         # 填充标题和话题
-        await asyncio.sleep(1)
-        print("  [-] 正在填充标题和话题...")
-        title_container = page.get_by_placeholder('添加合适的话题和描述，作品能获得更多推荐～')
-        if await title_container.count():
-           await title_container.click()
-           await title_container.fill(self.title[:30])
+        # await asyncio.sleep(2)
+        # print("  [-] 正在填充标题和话题...")
+        # title_container = page.get_by_placeholder('添加合适的话题和描述，作品能获得更多推荐～')
+        # if await title_container.count():
+        #    await title_container.click()
+        #    await title_container.fill(self.title[:30])
+
+
+        await page.get_by_text("描述").locator("xpath=following-sibling::div").click()
+        print("clear existing title")
+        await page.keyboard.press("Backspace")
+        await page.keyboard.press("Control+KeyA")
+        await page.keyboard.press("Delete")
+        print("filling new  title")
+        await page.keyboard.type(self.title)
+        await page.keyboard.press("Enter")
+
         # else:
         #     titlecontainer = page.locator(".notranslate")
         #     await titlecontainer.click()
@@ -235,59 +253,79 @@ class KuaiShouVideo(object):
         #     await page.type(css_selector, "#" + tag)
         #     await page.press(css_selector, "Space")
 
-        while True:
-            # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待
+        # 快手只能添加3个话题
+        for index, tag in enumerate(self.tags[:3], start=1):
+            print("正在添加第%s个话题" % index)
+            await page.keyboard.type(f"#{tag} ")
+            await asyncio.sleep(2)
+
+        max_retries = 60  # 设置最大重试次数,最大等待时间为 2 分钟
+        retry_count = 0
+
+        while retry_count < max_retries:
             try:
-                #  新版：定位重新上传
-                number = await page.locator('span:has-text("上传成功")').count()
-                if number > 0:
-                    print("  [-]视频上传完毕")
+                # 获取包含 '上传中' 文本的元素数量
+                number = await page.locator("text=上传中").count()
+
+                if number == 0:
+                    print("视频上传完毕")
                     break
                 else:
-                    print("  [-] 正在上传视频中...")
+                    if retry_count % 5 == 0:
+                        print("正在上传视频中...")
                     await asyncio.sleep(2)
+            except Exception as e:
+                print(f"检查上传状态时发生错误: {e}")
+                await asyncio.sleep(2)  # 等待 2 秒后重试
+            retry_count += 1
 
-                    # if await page.locator('div.progress-div > div:has-text("上传失败")').count():
-                    #     print("  [-] 发现上传出错了...")
-                    #     await self.handle_upload_error(page)
-            except:
-                print("  [-] 正在上传视频中...")
-                await asyncio.sleep(2)
+        if retry_count == max_retries:
+            print("超过最大重试次数，视频上传可能未完成。")
 
-        # 修改预览图
-        await page.get_by_role("button", name="编辑封面").click()
-        await asyncio.sleep(1)
-        await page.get_by_role("tab", name="上传封面").click()
-        preview_upload_div_loc = page.get_by_role("tabpanel", name="上传封面").locator("div").nth(1)
-        # await upload_div_loc.wait_for()
-        async with page.expect_file_chooser() as fc_info:
-            await preview_upload_div_loc.click()
-        preview_file_chooser = await fc_info.value
-        await preview_file_chooser.set_files(self.video_preview)
-        await page.get_by_role("button", name="确认").click()
-        await asyncio.sleep(5)  # 这里延迟是为了方便预览图上传
-        # 定时发布
-        # if self.publish_date != 0:
-        #     await self.set_schedule_time_ks(page, self.publish_date)
+        # # 修改预览图
+        # await page.get_by_role("button", name="编辑封面").click()
+        # await asyncio.sleep(1)
+        # await page.get_by_role("tab", name="上传封面").click()
+        # preview_upload_div_loc = page.get_by_role("tabpanel", name="上传封面").locator("div").nth(1)
+        # # await upload_div_loc.wait_for()
+        # async with page.expect_file_chooser() as fc_info:
+        #     await preview_upload_div_loc.click()
+        # preview_file_chooser = await fc_info.value
+        # await preview_file_chooser.set_files(self.video_preview)
+        # await page.get_by_role("button", name="确认").click()
+        # await asyncio.sleep(5)  # 这里延迟是为了方便预览图上传
+
+
+        # 定时任务
+        if self.publish_date != 0:
+            await self.set_schedule_time(page, self.publish_date)
 
         # 判断视频是否发布成功
         while True:
-            # 判断视频是否发布成功
             try:
-                publish_button = page.get_by_role('button', name="发布", exact=True)
-                if await publish_button.count():
+                publish_button = page.get_by_text("发布", exact=True)
+                if await publish_button.count() > 0:
                     await publish_button.click()
-                await page.wait_for_url("https://cp.kuaishou.com/article/manage/video?status=2&from=publish",
-                                        timeout=1500)  # 如果自动跳转到作品页面，则代表发布成功
-                print("  [-]视频发布成功")
+
+                await asyncio.sleep(1)
+                confirm_button = page.get_by_text("确认发布")
+                if await confirm_button.count() > 0:
+                    await confirm_button.click()
+
+                # 等待页面跳转，确认发布成功
+                await page.wait_for_url(
+                    "https://cp.kuaishou.com/article/manage/video?status=2&from=publish",
+                    timeout=5000,
+                )
+                print("视频发布成功")
                 break
-            except:
-                print("  [-] 视频正在发布中...")
+            except Exception as e:
+                print(f"视频正在发布中... 错误: {e}")
                 await page.screenshot(full_page=True)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1)
 
         await context.storage_state(path=self.account_file)  # 保存cookie
-        print('  [-]cookie更新完毕！')
+        print('cookie更新完毕！')
         await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
         # 关闭浏览器上下文和浏览器实例
         await context.close()

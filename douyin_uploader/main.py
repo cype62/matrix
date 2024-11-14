@@ -5,7 +5,7 @@ import traceback
 import os
 from datetime import datetime
 from conf import REDIS_CONF
-from playwright.async_api import Playwright, async_playwright
+from playwright.async_api import Playwright, async_playwright, Page
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
@@ -59,7 +59,7 @@ async def douyin_cookie_gen(account_file_path,account_id="",queue_id=""):
     try:
         async with async_playwright() as playwright:
             options = {
-                'headless': False
+                'headless': True
             }
             # Make sure to run headed.
             browser = await playwright.chromium.launch(**options)
@@ -153,7 +153,7 @@ async def douyin_cookie_gen_home(account_file_path,account_id="",queue_id=""):
     try:
         async with async_playwright() as playwright:
             options = {
-                'headless': False
+                'headless': True
             }
             # Make sure to run headed.
             browser = await playwright.chromium.launch(**options)
@@ -223,7 +223,7 @@ async def douyin_cookie_gen_home(account_file_path,account_id="",queue_id=""):
         return False
 
 class DouYinVideo(object):
-    def __init__(self, title, file_path,preview_path, tags, publish_date, account_file,location="重庆市"):
+    def __init__(self, title, file_path,preview_path, tags, publish_date, account_file,location="广州市", thumbnail_path=None):
         self.title = title  # 视频标题
         self.file_path = file_path # 视频文件路径
         self.preview_path = preview_path # 视频预览图路径
@@ -233,10 +233,12 @@ class DouYinVideo(object):
         self.date_format = '%Y年%m月%d日 %H:%M'
         self.local_executable_path = ""  # change me
         self.location = location
+        self.thumbnail_path = thumbnail_path
+
 
     async def set_schedule_time_douyin(self, page, publish_date):
         # 选择包含特定文本内容的 label 元素
-        label_element = page.locator("label.radio-d4zkru:has-text('定时发布')")
+        label_element = page.locator("[class^='radio']:has-text('定时发布')")
         # 在选中的 label 元素下点击 checkbox
         await label_element.click()
         await asyncio.sleep(1)
@@ -257,9 +259,9 @@ class DouYinVideo(object):
     async def upload(self, playwright: Playwright) -> None:
         # 使用 Chromium 浏览器启动一个浏览器实例
         if self.local_executable_path:
-            browser = await playwright.chromium.launch(headless=False, executable_path=self.local_executable_path)
+            browser = await playwright.chromium.launch(headless=True, executable_path=self.local_executable_path)
         else:
-            browser = await playwright.chromium.launch(headless=False)
+            browser = await playwright.chromium.launch(headless=True)
         # 创建一个浏览器上下文，使用指定的 cookie 文件
         context = await browser.new_context(storage_state=f"{self.account_file}")
 
@@ -272,10 +274,6 @@ class DouYinVideo(object):
         print('[-] 正在打开主页...')
         await page.wait_for_url("https://creator.douyin.com/creator-micro/content/upload")
         # 点击 "上传视频" 按钮
-        upload_div_loc = page.locator("div.container-drag-info-Tl0RGH").first
-        async with page.expect_file_chooser() as video_fc_info:
-            await upload_div_loc.click()
-        video_file_chooser = await video_fc_info.value
         if not os.path.exists(self.file_path):
             print(f"上传的视频文件不存在，路径是{self.file_path}")
             # 关闭浏览器上下文和浏览器实例
@@ -283,7 +281,8 @@ class DouYinVideo(object):
             await browser.close()
             await playwright.stop()
             return False
-        await video_file_chooser.set_files(self.file_path)
+        await page.locator("div[class^='container-drag'] input").set_input_files(self.file_path)
+
         # 等待页面跳转到指定的 URL
         while True:
             # 判断是是否进入视频发布页面，没进入，则自动等待到超时
@@ -323,7 +322,7 @@ class DouYinVideo(object):
             # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待
             try:
                 #  新版：定位重新上传
-                number = await page.locator("label").filter(has_text="重新上传").count()
+                number = await page.locator('[class^="upload-btn"] div:has-text("重新上传")').count()
                 if number > 0:
                     print("  [-]视频上传完毕")
                     break
@@ -407,6 +406,28 @@ class DouYinVideo(object):
         await context.close()
         await browser.close()
         await playwright.stop()
+
+    async def set_thumbnail(self, page: Page, thumbnail_path: str):
+        if thumbnail_path:
+            await page.click('text="选择封面"')
+            await page.wait_for_selector("div.semi-modal-content:visible")
+            await page.click('text="上传封面"')
+            # 定位到上传区域并点击
+            await page.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input").set_input_files(thumbnail_path)
+            await page.wait_for_timeout(2000)  # 等待2秒
+            await page.locator("div[class^='uploadCrop'] button:has-text('完成')").click()
+
+    async def set_location(self, page: Page, location: str = "广州市"):
+        # todo supoort location later
+        # await page.get_by_text('添加标签').locator("..").locator("..").locator("xpath=following-sibling::div").locator(
+        #     "div.semi-select-single").nth(0).click()
+        await page.locator('div.semi-select span:has-text("输入地理位置")').click()
+        await page.keyboard.press("Backspace")
+        await page.wait_for_timeout(2000)
+        await page.keyboard.type(location)
+        await page.wait_for_selector('div[role="listbox"] [role="option"]', timeout=5000)
+        await page.locator('div[role="listbox"] [role="option"]').first.click()
+
 
     async def main(self):
         async with async_playwright() as playwright:

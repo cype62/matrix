@@ -58,7 +58,7 @@ while True:
                     mycursor.execute(f"SELECT id,status,username,avatar FROM mx_account_info WHERE uid={account_id} AND account_id='{cookie_setup['account_id']}'")  
                     exist_info = mycursor.fetchone()
                     if not exist_info:
-                        mycursor.execute(f"INSERT INTO mx_account_info (queue_id,uid,account_id,username,avatar,extend,type,status,created_at) VALUES ({queue_id},{account_id},'{cookie_setup['account_id']}','{cookie_setup['username']}','{cookie_setup['avatar']}','',{type},1,{int(time.time())})")
+                        mycursor.execute(f"INSERT INTO mx_account_info (queue_id,uid,account_id,username,avatar,extend,type,status,created_at) VALUES ({queue_id},{account_id},'{cookie_setup['account_id']}','{cookie_setup['username']}','{cookie_setup['avatar']}','',{type},1,time.time())")
                     else:
                         # 存在则判断是否登录，未登录则改为登录
                         if exist_info[1] !=1:

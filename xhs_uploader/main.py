@@ -101,6 +101,7 @@ def xhs_setup(account_file_path, handle=False ,account_id="",queue_id=""):
         num=1
         while True:
             check_qrcode = xhs_client.check_qrcode(qr_id,qr_code)
+            print(f"check_qrcode:{check_qrcode}")
             sleep(1)
             if check_qrcode["code_status"] == 2:
                 # 按照当前登录用户，获取用户信息
@@ -113,6 +114,7 @@ def xhs_setup(account_file_path, handle=False ,account_id="",queue_id=""):
                     'avatar':user_info_res['images'],
                 }
                 # 保存抖音账号的登录状态，时间一个周
+                print(f"{account_id} 登录成功")
                 account_file = f"{account_file_path}/{account_id}_{third_id}_account.json"
                 file = open(account_file, 'a')
                 # 写入数据到文件中
@@ -120,9 +122,14 @@ def xhs_setup(account_file_path, handle=False ,account_id="",queue_id=""):
                 # 关闭文件
                 file.close()
                 # 记录登录状态 记录当前用户的登陆状态，只算此次
+                print(f"{account_id} 登录成功2")
                 cache_data(f"xhs_login_status_{account_id}",1,60)
                 # 记录xhs的ID的登录状态，算作一天过期，目前未知
                 cache_data(f"xhs_login_status_third_{account_id}_{third_id}",1,86400)
+                print(f"{account_id} 登录成功3")
+                # 删除二维码
+                # cache_data(f"xhs_login_ewm_{queue_id}",'')
+                # 返回用户信息
                 return user_info
             # 如果查询100次还未登录，直接返回登陆失败
             num+=1
