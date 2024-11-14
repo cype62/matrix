@@ -6,7 +6,7 @@ from pathlib import Path
 from conf import BASE_DIR,MYSQL_CONF
 from douyin_uploader.main import douyin_setup
 from tencent_uploader.main import weixin_setup
-from xhs_uploader.main import xhs_setup
+from xhs_uploader.get_cookie import xhs_setup
 from ks_uploader.main import ks_setup
 
 parser = argparse.ArgumentParser(description='这是一个获取登录状态的脚本。') 
@@ -46,7 +46,7 @@ while True:
                     cookie_setup = asyncio.run(weixin_setup(str(account_file_path), handle=True,account_id=account_id,queue_id=queue_id))
                 if x[2] == 3:
                     account_file_path = Path(BASE_DIR / "xhs_uploader"/ "account")
-                    cookie_setup = xhs_setup(str(account_file_path), handle=True,account_id=account_id,queue_id=queue_id)
+                    cookie_setup = asyncio.run(xhs_setup(str(account_file_path), handle=True,account_id=account_id,queue_id=queue_id))
                 if x[2] == 4:
                     account_file_path = Path(BASE_DIR / "ks_uploader"/ "account")
                     cookie_setup = asyncio.run(ks_setup(str(account_file_path), handle=True,account_id=account_id,queue_id=queue_id))
