@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import io
+import os
 import pathlib
 import traceback
 from PIL import Image
@@ -182,9 +183,170 @@ async def check_qr_code_status(page, qr_code_id):
 
         await asyncio.sleep(1)  # 使用 asyncio.sleep
 
+
+class XhsVideo(object):
+    def __init__(self, title, file_path,preview_path, tags, publish_date, account_file,location="广州市", thumbnail_path=None):
+        self.title = title  # 视频标题
+        self.file_path = file_path # 视频文件路径
+        self.preview_path = preview_path # 视频预览图路径
+        self.tags = tags
+        self.publish_date = publish_date
+        self.account_file = account_file
+        self.date_format = '%Y年%m月%d日 %H:%M'
+        self.local_executable_path = ""  # change me
+        self.location = location
+        self.thumbnail_path = thumbnail_path
+    
+    async def set_schedule_time_xhs(self, page, publish_date):
+        # 选择定时发布lable
+        label_element = await page.get_by_text("定时发布").click()
+        await asyncio.sleep(1)
+        publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M")
+        
+        await asyncio.sleep(1)
+        await page.locator('.el-input__inner[placeholder="选择日期和时间"]').click()
+        await page.keyboard.press("Control+KeyA")
+        await page.keyboard.type(str(publish_date_hour))
+        await page.keyboard.press("Enter")
+
+        await asyncio.sleep(1)
+
+    async def handle_upload_error(self, page):
+        print("视频出错了，重新上传中")
+        await page.locator('div.progress-div [class^="upload-btn-input"]').set_input_files(self.file_path)
+
+    async def upload(self, playwright: Playwright) -> None:
+        # 使用 Chromium 浏览器启动一个浏览器实例
+        if self.local_executable_path:
+            browser = await playwright.chromium.launch(headless=False, executable_path=self.local_executable_path)
+        else:
+            browser = await playwright.chromium.launch(headless=False)
+        # 创建一个浏览器上下文，使用指定的 cookie 文件
+        context = await browser.new_context(storage_state=f"{self.account_file}")
+
+        # 创建一个新的页面
+        page = await context.new_page()
+        # 访问指定的 URL
+        await page.goto("https://creator.xiaohongshu.com/publish/publish?from=menu")
+        print('[+]正在上传-------{}.mp4'.format(self.title))
+        # 等待页面跳转到指定的 URL，没进入，则自动等待到超时
+        print('[-] 正在打开主页...')
+        await page.wait_for_url("https://creator.xiaohongshu.com/publish/publish?from=menu")
+        
+        # await page.pause()
+
+        # 点击 "上传视频" 按钮
+        if not os.path.exists(self.file_path):
+            print(f"上传的视频文件不存在，路径是{self.file_path}")
+            # 关闭浏览器上下文和浏览器实例
+            await context.close()
+            await browser.close()
+            await playwright.stop()
+            return False
+        await page.locator("div[class^='drag-over'] input").set_input_files(self.file_path)
+
+        while True:
+            # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待
+            try:
+                #  新版：定位重新上传
+                # number = await page.locator('[class^="upload-btn"] div:has-text("重新上传")').count()
+                number = await page.get_by_text("替换视频").count()
+                if number > 0:
+                    print("  [-]视频上传完毕")
+                    break
+                else:
+                    print("  [-] 正在上传视频中...")
+                    await asyncio.sleep(2)
+
+                    if await page.get_by_text("上传失败").count():
+                        print("  [-] 发现上传出错了...")
+                        await self.handle_upload_error(page)
+            except:
+                print("  [-] 正在上传视频中...")
+                await asyncio.sleep(2)
+
+        # 填充标题和话题
+        await asyncio.sleep(1)
+        print("  [-] 正在填充标题和话题...")
+        page.get_by_placeholder("填写标题会有更多赞哦～").click()
+        page.get_by_placeholder("填写标题会有更多赞哦～").fill(self.title[:30])
+
+
+        css_selector = ".topic-container"
+        for index, tag in enumerate(self.tags, start=1):
+            print("正在添加第%s个话题" % index)
+            await page.type(css_selector, "#" + tag + "[话题]#")
+            await page.press(css_selector, "Space")
+
+        await asyncio.sleep(5)
+
+        # 定时发布
+        if self.publish_date != 0:
+            await self.set_schedule_time_xhs(page, self.publish_date)
+
+        # 判断视频是否发布成功
+        while True:
+            # 判断视频是否发布成功
+            try:
+                publish_button = page.get_by_role('button', name="发布", exact=True)
+                if await publish_button.count():
+                    await publish_button.click()
+                await page.wait_for_url("https://creator.xiaohongshu.com/new/note-manager",
+                                        timeout=5000)  # 如果自动跳转到作品页面，则代表发布成功
+                print("  [-]视频发布成功")
+                break
+            except:
+                # 如果页面是管理页面代表发布成功
+                current_url = page.url
+                if "https://creator.xiaohongshu.com/new/note-manager" in current_url:
+                    print("  [-]视频发布成功")
+                    break
+                else:        
+                    print("  [-] 视频正在发布中...")
+                    # await page.screenshot(full_page=True) 取消截屏
+                    await asyncio.sleep(0.5)
+        await context.storage_state(path=self.account_file)  # 保存cookie
+        print('  [-]cookie更新完毕！')
+        await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
+        # 关闭浏览器上下文和浏览器实例
+        await context.close()
+        await browser.close()
+        await playwright.stop()
+
+    # async def set_thumbnail(self, page: Page, thumbnail_path: str):
+    #     if thumbnail_path:
+    #         await page.click('text="选择封面"')
+    #         await page.wait_for_selector("div.semi-modal-content:visible")
+    #         await page.click('text="上传封面"')
+    #         # 定位到上传区域并点击
+    #         await page.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input").set_input_files(thumbnail_path)
+    #         await page.wait_for_timeout(2000)  # 等待2秒
+    #         await page.locator("div[class^='uploadCrop'] button:has-text('完成')").click()
+
+    # async def set_location(self, page: Page, location: str = "广州市"):
+    #     # todo supoort location later
+    #     # await page.get_by_text('添加标签').locator("..").locator("..").locator("xpath=following-sibling::div").locator(
+    #     #     "div.semi-select-single").nth(0).click()
+    #     await page.locator('div.semi-select span:has-text("输入地理位置")').click()
+    #     await page.keyboard.press("Backspace")
+    #     await page.wait_for_timeout(2000)
+    #     await page.keyboard.type(location)
+    #     await page.wait_for_selector('div[role="listbox"] [role="option"]', timeout=5000)
+    #     await page.locator('div[role="listbox"] [role="option"]').first.click()
+
+
 async def main():
-    # await xhs_cookie_gen(None, None, None)
-    await cookie_auth(account_file_path)
+    async with async_playwright() as playwright:
+        xhs_video = XhsVideo(
+            title="1",
+            file_path="/Users/Benny/Documents/github/matrix/video/1.mp4",
+            preview_path="",
+            tags="",
+            publish_date="",
+            account_file="/Users/Benny/Documents/github/matrix/xhs_uploader/account/1_8239872255_account.json"
+        )
+        await xhs_video.upload(playwright)
+
 
 if __name__ == '__main__':
     try:

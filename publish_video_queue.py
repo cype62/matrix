@@ -14,7 +14,7 @@ from douyin_uploader.main import DouYinVideo
 from ks_uploader.main import KuaiShouVideo
 from requests import RequestException
 from xhs import XhsClient,exception as xhs_exception
-from xhs_uploader.main import upload_xhs_video,sign
+from xhs_uploader.get_cookie import XhsVideo
 from utils.files_times import get_data_hashtags
 
 # parser = argparse.ArgumentParser(description='这是一个上传视频的脚本。') 
@@ -271,7 +271,7 @@ while True:
                     publishSuccess(mycursor,queue_id,2)
                 elif type == 3:
                     # 小红书需要有封面图
-                    upload_res = upload_xhs_video(video_title,get_file_absolute_path(video_path),
+                    upload_res = XhsVideo(video_title,get_file_absolute_path(video_path),
                     get_data_hashtags(video_tags),publish_date,video_description,
                     get_file_absolute_path(video_preview),account_file)
                     if upload_res:
