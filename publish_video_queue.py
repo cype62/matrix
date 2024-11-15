@@ -234,7 +234,7 @@ while True:
                 # 更新数据
                 mycursor.execute(f"UPDATE mx_publish_task_video_queue SET status=1 WHERE id={queue_id}") 
                 # 查询第三方登录用户表
-                mycursor.execute("SELECT id,uid,account_id FROM mx_account_info WHERE account_id="f"{account_info_id}") 
+                mycursor.execute(f'SELECT id,uid,account_id FROM mx_account_info WHERE account_id="{account_info_id}"') 
                 account_info = mycursor.fetchone()
                 print(account_info)
                 account_uid = account_info[1]

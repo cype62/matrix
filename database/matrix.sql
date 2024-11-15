@@ -72,7 +72,7 @@ CREATE TABLE `mx_publish_task_video_queue`  (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `uid` bigint(20) UNSIGNED NOT NULL DEFAULT 0 COMMENT '发布任务用户ID',
   `type` tinyint(3) UNSIGNED NOT NULL DEFAULT 0 COMMENT '上传类型：1：抖音；2：视频号；3：小红书；4：快手',
-  `account_info_id` bigint(20) UNSIGNED NOT NULL DEFAULT 0 COMMENT '第三方授权用户ID',
+  `account_info_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '第三方授权用户ID',
   `title` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '发布标题',
   `tags` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '发布标签',
   `preview` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '发布预览图',
