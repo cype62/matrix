@@ -7,3 +7,5 @@ pymysql
 redis
 qrcode
 xhs
+pyzbar
+Pillow

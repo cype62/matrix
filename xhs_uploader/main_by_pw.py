@@ -6,7 +6,9 @@ import os
 import pathlib
 import traceback
 from PIL import Image
+from pyzbar.pyzbar import decode
 from playwright.async_api import Playwright, async_playwright, Page
+import qrcode
 import redis
 from conf import BASE_DIR, REDIS_CONF
 
@@ -35,7 +37,6 @@ async def cookie_auth(account_file_path, account_id, third_id):
 
 async def xhs_setup(account_file_path, handle=True,account_id="",queue_id=""):
     user_info = await xhs_cookie_gen(account_file_path,account_id,queue_id)
-    print("23423423:",user_info)
     return user_info
 
 def cache_data(key:str,value:str,timeout=60)->None:
@@ -131,11 +132,35 @@ async def xhs_cookie_gen(account_file_path,account_id="",queue_id=""):
         return False
 
 async def show_qr_code(image_data):
-    """解码 base64 图像数据并显示出来。"""
-    header, encoded = image_data.split(',', 1)
-    img_bytes = base64.b64decode(encoded)
-    image = Image.open(io.BytesIO(img_bytes))
-    image.show()
+    """解码 base64 图像数据并显示出来，同时识别二维码内容。"""
+
+    try:
+        # 解码图像数据
+        img_bytes = base64.b64decode(image_data.split(',', 1)[1])
+        image = Image.open(io.BytesIO(img_bytes))
+        # image.show()
+    except Exception as e:
+        print("图像解码失败:", e)
+        return None  # 返回 None 表示失败
+
+    # 解码二维码内容
+    decoded_objects = decode(image)
+
+    if decoded_objects:
+        content = decoded_objects[0].data.decode('utf-8')  # 取第一个二维码内容
+        # print("二维码内容:", content)
+
+        # 生成新的二维码
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.ERROR_CORRECT_L,
+                            box_size=50, border=1)
+        qr.add_data(content)
+        qr.make()
+        qr.print_ascii(tty='#fff')
+
+        return content  # 返回二维码内容
+    else:
+        print("未检测到二维码")
+        return None  # 返回 None 表示没有找到二维码
 
 async def fetch_qr_code_id(page):
     """通过监听响应事件获取二维码 ID。"""
@@ -153,7 +178,7 @@ async def fetch_qr_code_id(page):
     page.on('response', handle_response)
 
     while not qr_code_id:
-        print("[-]没找到id，继续等待。")
+        print("[-]没找到qrcode_id，继续等待。")
         await asyncio.sleep(1)  # 轮询等待
     return qr_code_id
 
@@ -161,7 +186,6 @@ async def check_qr_code_status(page, qr_code_id):
     """检查二维码的状态，并设置超时。"""
     status_url = f'https://customer.xiaohongshu.com/api/cas/customer/web/qr-code?service=https:%2F%2Fcreator.xiaohongshu.com&qr_code_id={qr_code_id}&source='
     scan = False
-    print(not scan)
     while not scan:
         response = await page.request.get(status_url)
         # 在这里修改成正确的属性访问
