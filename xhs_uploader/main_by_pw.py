@@ -216,14 +216,14 @@ async def check_qr_code_status(page, qr_code_id):
 
 
 class XhsVideo(object):
-    def __init__(self, title, file_path,preview_path, tags, publish_date, account_file,location="重庆市", thumbnail_path=None):
+    def __init__(self, title, file_path,preview_path, tags, publish_date, account_file,location, thumbnail_path=None):
         self.title = title  # 视频标题
         self.file_path = file_path # 视频文件路径
         self.preview_path = preview_path # 视频预览图路径
         self.tags = tags
         self.publish_date = publish_date
         self.account_file = account_file
-        self.date_format = '%Y年%m月%d日 %H:%M'
+        self.date_format = '%Y-%m-%d %H:%M'
         self.local_executable_path = ""  # change me
         self.location = location
         self.thumbnail_path = thumbnail_path
@@ -232,13 +232,13 @@ class XhsVideo(object):
         # 选择定时发布lable
         await page.get_by_text("定时发布").click()
         await asyncio.sleep(1)
-        # publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M")
+        publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M")
         
         await asyncio.sleep(1)
         await page.locator('.el-input__inner[placeholder="选择日期和时间"]').click()
         await page.keyboard.press("Control+KeyA")
-        # await page.keyboard.type(str(publish_date_hour))
-        await page.keyboard.type(publish_date)
+        await page.keyboard.type(str(publish_date_hour))
+        # await page.keyboard.type(publish_date)
         await page.keyboard.press("Enter")
 
         await asyncio.sleep(1)
@@ -309,14 +309,13 @@ class XhsVideo(object):
             await page.keyboard.press("Enter")
 
         # 定位
-        if self.location != 0:
+        if self.location is not None:
             await self.set_location(page, self.location)
 
         
         # 定时发布
-        if self.publish_date != 0:
+        if self.publish_date is not None:
             await self.set_schedule_time_xhs(page, self.publish_date)
-        
         # 点击 "发布" 按钮
         print("  [-] 正在点击发布...")
         await page.get_by_role("button", name="发布").click()
@@ -347,7 +346,6 @@ class XhsVideo(object):
         print('  [-]cookie更新完毕！')
         await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
         # 关闭浏览器上下文和浏览器实例
-
 
 
         await context.close()

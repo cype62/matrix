@@ -228,7 +228,7 @@ while True:
                 video_tags = x[5]
                 video_preview = x[6]
                 video_path = x[7]
-                location = x[9] if x[9] else "重庆市"
+                location = x[9]
                 publish_date = x[10]
                 #task_queue_id = x[11]
                 # 更新数据
