@@ -10,7 +10,7 @@ from playwright.async_api import Playwright, async_playwright, Page
 import redis
 from conf import BASE_DIR, REDIS_CONF
 
-async def cookie_auth(account_file_path):
+async def cookie_auth(account_file_path, account_id, third_id):
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         context = await browser.new_context(storage_state=account_file)
@@ -21,12 +21,19 @@ async def cookie_auth(account_file_path):
         try:
             await page.wait_for_selector("div.home-card-title('热门活动')", timeout=5000)  # 等待5秒
             print("[+] 等待5秒 cookie 失效")
+            await cache_delete(f"xhs_login_status_third_{account_id}_{third_id}")
+            context.close()
+            browser.close()
+            playwright.stop()
             return False
         except:
             print("[+] cookie 有效")
+            context.close()
+            browser.close()
+            playwright.stop()
             return True
 
-async def xhs_setup(account_file_path, handle=False,account_id="",queue_id=""):
+async def xhs_setup(account_file_path, handle=True,account_id="",queue_id=""):
     user_info = await xhs_cookie_gen(account_file_path,account_id,queue_id)
     print("23423423:",user_info)
     return user_info
@@ -101,7 +108,7 @@ async def xhs_cookie_gen(account_file_path,account_id="",queue_id=""):
                 # 保存cookie长度不大于9不保存
                 if len(cookies) > 9:
                     third_id_cont = await page.get_by_text("小红书账号:").inner_text()
-                    third_id = third_id_cont.split(": ")[1]
+                    third_id = third_id_cont.split(":")[1].strip()
                     user_info = {
                         'account_id':third_id,#小红书号
                         'username':await page.locator("div[class^=account-name]").inner_text(),#用户名
@@ -185,7 +192,7 @@ async def check_qr_code_status(page, qr_code_id):
 
 
 class XhsVideo(object):
-    def __init__(self, title, file_path,preview_path, tags, publish_date, account_file,location="广州市", thumbnail_path=None):
+    def __init__(self, title, file_path,preview_path, tags, publish_date, account_file,location="重庆市", thumbnail_path=None):
         self.title = title  # 视频标题
         self.file_path = file_path # 视频文件路径
         self.preview_path = preview_path # 视频预览图路径
@@ -199,14 +206,15 @@ class XhsVideo(object):
     
     async def set_schedule_time_xhs(self, page, publish_date):
         # 选择定时发布lable
-        label_element = await page.get_by_text("定时发布").click()
+        await page.get_by_text("定时发布").click()
         await asyncio.sleep(1)
-        publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M")
+        # publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M")
         
         await asyncio.sleep(1)
         await page.locator('.el-input__inner[placeholder="选择日期和时间"]').click()
         await page.keyboard.press("Control+KeyA")
-        await page.keyboard.type(str(publish_date_hour))
+        # await page.keyboard.type(str(publish_date_hour))
+        await page.keyboard.type(publish_date)
         await page.keyboard.press("Enter")
 
         await asyncio.sleep(1)
@@ -232,8 +240,6 @@ class XhsVideo(object):
         # 等待页面跳转到指定的 URL，没进入，则自动等待到超时
         print('[-] 正在打开主页...')
         await page.wait_for_url("https://creator.xiaohongshu.com/publish/publish?from=menu")
-        
-        # await page.pause()
 
         # 点击 "上传视频" 按钮
         if not os.path.exists(self.file_path):
@@ -248,8 +254,6 @@ class XhsVideo(object):
         while True:
             # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待
             try:
-                #  新版：定位重新上传
-                # number = await page.locator('[class^="upload-btn"] div:has-text("重新上传")').count()
                 number = await page.get_by_text("替换视频").count()
                 if number > 0:
                     print("  [-]视频上传完毕")
@@ -268,21 +272,31 @@ class XhsVideo(object):
         # 填充标题和话题
         await asyncio.sleep(1)
         print("  [-] 正在填充标题和话题...")
-        page.get_by_placeholder("填写标题会有更多赞哦～").click()
-        page.get_by_placeholder("填写标题会有更多赞哦～").fill(self.title[:30])
+        await page.get_by_placeholder("填写标题会有更多赞哦～").click()
+        await page.get_by_placeholder("填写标题会有更多赞哦～").fill(self.title[:30])
 
-
-        css_selector = ".topic-container"
-        for index, tag in enumerate(self.tags, start=1):
+        for index, tag in enumerate(self.tags, start = 1):
             print("正在添加第%s个话题" % index)
-            await page.type(css_selector, "#" + tag + "[话题]#")
-            await page.press(css_selector, "Space")
+            await page.locator("#post-textarea").click()
+            await page.type("id=post-textarea", "#")
+            await asyncio.sleep(0.5)
+            await page.type("id=post-textarea", tag)
+            await asyncio.sleep(0.5)
+            await page.keyboard.press("Enter")
 
-        await asyncio.sleep(5)
+        # 定位
+        if self.location != 0:
+            await self.set_location(page, self.location)
 
+        
         # 定时发布
         if self.publish_date != 0:
             await self.set_schedule_time_xhs(page, self.publish_date)
+        
+        # 点击 "发布" 按钮
+        print("  [-] 正在点击发布...")
+        await page.get_by_role("button", name="发布").click()
+        
 
         # 判断视频是否发布成功
         while True:
@@ -291,14 +305,14 @@ class XhsVideo(object):
                 publish_button = page.get_by_role('button', name="发布", exact=True)
                 if await publish_button.count():
                     await publish_button.click()
-                await page.wait_for_url("https://creator.xiaohongshu.com/new/note-manager",
+                await page.wait_for_url("https://creator.xiaohongshu.com/publish/success?source&bind_status=not_bind&__debugger__=&proxy=",
                                         timeout=5000)  # 如果自动跳转到作品页面，则代表发布成功
                 print("  [-]视频发布成功")
                 break
             except:
                 # 如果页面是管理页面代表发布成功
                 current_url = page.url
-                if "https://creator.xiaohongshu.com/new/note-manager" in current_url:
+                if "https://creator.xiaohongshu.com/publish/success?source&bind_status=not_bind&__debugger__=&proxy=" in current_url:
                     print("  [-]视频发布成功")
                     break
                 else:        
@@ -309,10 +323,14 @@ class XhsVideo(object):
         print('  [-]cookie更新完毕！')
         await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
         # 关闭浏览器上下文和浏览器实例
+
+
+
         await context.close()
         await browser.close()
         await playwright.stop()
 
+    # 修改封面有空再完善
     # async def set_thumbnail(self, page: Page, thumbnail_path: str):
     #     if thumbnail_path:
     #         await page.click('text="选择封面"')
@@ -323,33 +341,18 @@ class XhsVideo(object):
     #         await page.wait_for_timeout(2000)  # 等待2秒
     #         await page.locator("div[class^='uploadCrop'] button:has-text('完成')").click()
 
-    # async def set_location(self, page: Page, location: str = "广州市"):
-    #     # todo supoort location later
-    #     # await page.get_by_text('添加标签').locator("..").locator("..").locator("xpath=following-sibling::div").locator(
-    #     #     "div.semi-select-single").nth(0).click()
-    #     await page.locator('div.semi-select span:has-text("输入地理位置")').click()
-    #     await page.keyboard.press("Backspace")
-    #     await page.wait_for_timeout(2000)
-    #     await page.keyboard.type(location)
-    #     await page.wait_for_selector('div[role="listbox"] [role="option"]', timeout=5000)
-    #     await page.locator('div[role="listbox"] [role="option"]').first.click()
+    async def set_location(self, page: Page, location: str = "重庆市"):
+        await page.locator('div.d-text.d-select-placeholder.d-text-ellipsis.d-text-nowrap:has-text("添加地点")').click()
+        print("clear existing location")
+        await page.keyboard.press("Backspace")
+        await page.keyboard.press("Control+KeyA")
+        await page.keyboard.press("Delete")
+        await page.keyboard.type(self.location)
+        await page.wait_for_selector('div[class="d-grid-item"]')
+        await asyncio.sleep(0.5)
+        await page.locator('div[class="d-grid-item"]').first.click()
 
 
-async def main():
-    async with async_playwright() as playwright:
-        xhs_video = XhsVideo(
-            title="1",
-            file_path="/Users/Benny/Documents/github/matrix/video/1.mp4",
-            preview_path="",
-            tags="",
-            publish_date="",
-            account_file="/Users/Benny/Documents/github/matrix/xhs_uploader/account/1_8239872255_account.json"
-        )
-        await xhs_video.upload(playwright)
-
-
-if __name__ == '__main__':
-    try:
-        asyncio.run(main())  # 使用 asyncio.run 执行 main 函数
-    except Exception as e:
-        traceback.print_exc()
+    async def main(self):
+        async with async_playwright() as playwright:
+            await self.upload(playwright)

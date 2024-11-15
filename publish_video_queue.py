@@ -13,8 +13,8 @@ from tencent_uploader.main import TencentVideo
 from douyin_uploader.main import DouYinVideo
 from ks_uploader.main import KuaiShouVideo
 from requests import RequestException
-from xhs import XhsClient,exception as xhs_exception
-from xhs_uploader.get_cookie import XhsVideo
+# from xhs import XhsClient,exception as xhs_exception
+from xhs_uploader.main_by_pw import XhsVideo
 from utils.files_times import get_data_hashtags
 
 # parser = argparse.ArgumentParser(description='这是一个上传视频的脚本。') 
@@ -129,34 +129,62 @@ def tencent_cookie_auth(account_file,type,account_uid,account_third_id):
             browser.close()
             playwright.stop()
             return True
-
+            
 # 小红书cookie校验
+#使用playwright方式校验
 def xhs_cookie_auth(account_file,type,account_uid,account_third_id):
     if not os.path.exists(account_file):
         return False
-    with open(account_file, 'r') as file:  
-        # 读取文件内容  
-        cookie = file.read()
-    try:
-        xhs_client = XhsClient(cookie, sign=sign)
-        info_res = xhs_client.get_self_info()
-        if not info_res:
-           deleteFile(account_file,type,account_uid,account_third_id)
-           return False
-        else:
-           return True
-    except RequestException as err:
-        print(f"Error: {err}")
-        deleteFile(account_file,type,account_uid,account_third_id)
-        return False
-    except xhs_exception as err:
-        print(f"Error: {err}")
-        deleteFile(account_file,type,account_uid,account_third_id)
-        return False
-    except BaseException as err:
-        print(f"Error: {err}")
-        deleteFile(account_file,type,account_uid,account_third_id)
-        return False
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        context = browser.new_context(storage_state=account_file)
+        # 创建一个新的页面
+        page = context.new_page()
+        # 访问指定的 URL
+        page.goto("https://creator.xiaohongshu.com")
+        try:
+            page.wait_for_selector("div.home-card-title('热门活动')", timeout=5000)  # 等待5秒
+            print("[+] 等待5秒 cookie 失效")
+            #失效直接删除json文件
+            deleteFile(account_file,type,account_uid,account_third_id)
+            context.close()
+            browser.close()
+            playwright.stop()
+            return False
+        except:
+            print("[+] cookie 有效")
+            context.close()
+            browser.close()
+            playwright.stop()
+            return True
+        
+# 使用ReaJason/xhs的服务校验
+# def xhs_cookie_auth(account_file,type,account_uid,account_third_id):
+#     if not os.path.exists(account_file):
+#         return False
+#     with open(account_file, 'r') as file:  
+#         # 读取文件内容  
+#         cookie = file.read()
+#     try:
+#         xhs_client = XhsClient(cookie, sign=sign)
+#         info_res = xhs_client.get_self_info()
+#         if not info_res:
+#            deleteFile(account_file,type,account_uid,account_third_id)
+#            return False
+#         else:
+#            return True
+#     except RequestException as err:
+#         print(f"Error: {err}")
+#         deleteFile(account_file,type,account_uid,account_third_id)
+#         return False
+#     except xhs_exception as err:
+#         print(f"Error: {err}")
+#         deleteFile(account_file,type,account_uid,account_third_id)
+#         return False
+#     except BaseException as err:
+#         print(f"Error: {err}")
+#         deleteFile(account_file,type,account_uid,account_third_id)
+#         return False
 
 
 # 创建mysql连接 TODO 待优化
@@ -206,8 +234,9 @@ while True:
                 # 更新数据
                 mycursor.execute(f"UPDATE mx_publish_task_video_queue SET status=1 WHERE id={queue_id}") 
                 # 查询第三方登录用户表
-                mycursor.execute("SELECT id,uid,account_id FROM mx_account_info WHERE id="f"{account_info_id}") 
+                mycursor.execute("SELECT id,uid,account_id FROM mx_account_info WHERE account_id="f"{account_info_id}") 
                 account_info = mycursor.fetchone()
+                print(account_info)
                 account_uid = account_info[1]
                 account_third_id = account_info[2]
                 try:
@@ -270,16 +299,24 @@ while True:
                     # 没问题改为成功
                     publishSuccess(mycursor,queue_id,2)
                 elif type == 3:
-                    # 小红书需要有封面图
-                    upload_res = XhsVideo(video_title,get_file_absolute_path(video_path),
-                    get_data_hashtags(video_tags),publish_date,video_description,
-                    get_file_absolute_path(video_preview),account_file)
-                    if upload_res:
-                        # 没问题改为成功
-                        publishSuccess(mycursor,queue_id,2)
-                    else:
-                        # 失败改数据库为失败
-                        publishFail(mycursor,queue_id,3)
+                    app = XhsVideo(video_title,get_file_absolute_path(video_path),get_file_absolute_path(video_preview),
+                    get_data_hashtags(video_tags),publish_datetimes,
+                    account_file,location)
+                    asyncio.run(app.main(), debug=False) 
+                    # 没问题改为成功
+                    publishSuccess(mycursor,queue_id,2)
+                # 使用xhs服务
+                # elif type == 3:
+                #     # 小红书需要有封面图
+                #     upload_res = XhsVideo(video_title,get_file_absolute_path(video_path),
+                #     get_data_hashtags(video_tags),publish_date,video_description,
+                #     get_file_absolute_path(video_preview),account_file)
+                #     if upload_res:
+                #         # 没问题改为成功
+                #         publishSuccess(mycursor,queue_id,2)
+                #     else:
+                #         # 失败改数据库为失败
+                #         publishFail(mycursor,queue_id,3)
                 elif type == 4:
                     # 快手视频上传
                     app = KuaiShouVideo(video_title,get_file_absolute_path(video_path),get_file_absolute_path(video_preview),

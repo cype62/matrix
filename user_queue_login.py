@@ -6,7 +6,8 @@ from pathlib import Path
 from conf import BASE_DIR,MYSQL_CONF
 from douyin_uploader.main import douyin_setup
 from tencent_uploader.main import weixin_setup
-from xhs_uploader.get_cookie import xhs_setup
+# from xhs_uploader.main import xhs_setup
+from xhs_uploader.main_by_pw import xhs_setup
 from ks_uploader.main import ks_setup
 
 parser = argparse.ArgumentParser(description='这是一个获取登录状态的脚本。') 
