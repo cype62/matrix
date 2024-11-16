@@ -31,6 +31,8 @@ matrix是**视频矩阵内容分发系统**的脚本代码，基于python，旨�
 ```
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 playwright install chromium
+# 是用了zbar的公共库
+# conda install -c conda-forge pyzbar
 ```
 
 # 使用方法

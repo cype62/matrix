@@ -41,7 +41,7 @@ while True:
                 account_id = x[1]
                 if x[2] == 1:
                     account_file_path = Path(BASE_DIR / "douyin_uploader"/ "account")
-                    cookie_setup = asyncio.run(douyin_setup(str(account_file_path), handle=True,account_id=account_id,queue_id=queue_id))
+                    cookie_setup = asyncio.run(douyin_setup(str(account_file_path), handle=False,account_id=account_id,queue_id=queue_id))
                 if x[2] == 2:
                     account_file_path = Path(BASE_DIR / "tencent_uploader"/ "account")
                     cookie_setup = asyncio.run(weixin_setup(str(account_file_path), handle=True,account_id=account_id,queue_id=queue_id))

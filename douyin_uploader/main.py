@@ -59,7 +59,7 @@ async def douyin_cookie_gen(account_file_path,account_id="",queue_id=""):
     try:
         async with async_playwright() as playwright:
             options = {
-                'headless': True
+                'headless': False
             }
             # Make sure to run headed.
             browser = await playwright.chromium.launch(**options)
@@ -100,7 +100,7 @@ async def douyin_cookie_gen(account_file_path,account_id="",queue_id=""):
                     await page.get_by_text("获取验证码").click()
                     num_two = 1
                     while True:
-                        await asyncio.sleep(3)
+                        await asyncio.sleep(2)
                         # 判断是否获取到了缓存中的验证码
                         auth_number = cache_get_data(f"douyin_login_authcode_{queue_id}")
                         if auth_number:
@@ -123,15 +123,17 @@ async def douyin_cookie_gen(account_file_path,account_id="",queue_id=""):
             cookies = await context.cookies()
             # 默认没获取到用户信息
             user_info = False
+            # await page.pause()
             # 保存cookie长度不大于30不保存
             if len(cookies) > 30:
                 # 直接获取用户数据然后返回
                 third_id_cont = await page.get_by_text("抖音号：").inner_text()
                 third_id = third_id_cont.split("：")[1]
                 user_info = {
-                    'account_id':third_id,#抖音号
-                    'username':await page.locator("div.rNsML").inner_text(),#用户名
-                    'avatar':await page.locator("div.t4cTN img").nth(0).get_attribute("src")#头像
+                    'account_id':third_id,#抖音号name-rNsMLq
+                    'username': await page.locator("[class*='rNsML']").text_content(),  # 用户名
+                    'avatar': await page.locator("[class*='t4cTN'] img").get_attribute("src")  # 头像
+
                 }
                 account_file = f"{account_file_path}/{account_id}_{third_id}_account.json"
                 # 保存cookie
@@ -382,6 +384,7 @@ class DouYinVideo(object):
         while True:
             # 判断视频是否发布成功
             try:
+                # await page.pause()
                 publish_button = page.get_by_role('button', name="发布", exact=True)
                 if await publish_button.count():
                     await publish_button.click()
